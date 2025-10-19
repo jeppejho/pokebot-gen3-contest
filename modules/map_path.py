@@ -18,9 +18,13 @@ class Direction(IntEnum):
     South = 2
     West = 3
 
+    def __hash__(self):
+        return self.value
+
     def opposite(self):
         return Direction((self.value + 2) % 4)
 
+    @property
     def button_name(self):
         if self is Direction.North:
             return "Up"
@@ -59,9 +63,10 @@ class PathTile:
     warps_to: tuple[tuple[int, int], tuple[int, int], Direction | None] | None
     waterfall_to: tuple[int, int] | None
     muddy_slope_to: tuple[int, int] | None
-    forced_movement_to: tuple[tuple[int, int], tuple[int, int], int] | None
+    forced_movement_to: dict[Direction, tuple[tuple[int, int], tuple[int, int], int]] | None
     needs_acro_bike: bool
     needs_bunny_hop: bool
+    cannot_run: bool
 
     @property
     def global_coordinates(self) -> tuple[int, int]:
@@ -82,15 +87,31 @@ class PathMap:
         if self._tiles is None:
             map_data = get_map_data(self.map_group_and_number, (0, 0))
 
-            def tile_index(x: int, y: int):
+            def tile_index(x: int, y: int) -> int:
                 return y * map_data.map_size[0] + x
 
             self._tiles = []
             all_tiles = get_map_all_tiles(map_data)
+
+            event_triggers: dict[int, list[tuple[int, int]]] = {}
+            for event in map_data.coord_events:
+                if event.type != "weather":
+                    key = tile_index(*event.local_coordinates)
+                    if key not in event_triggers:
+                        event_triggers[key] = []
+                    event_triggers[key].append((event.trigger_var_number, event.trigger_value))
+
+            warp_cache: dict[int, list[MapLocation]] = {}
+            for warp in map_data.warps:
+                key = tile_index(*warp.local_coordinates)
+                if key not in warp_cache:
+                    warp_cache[key] = []
+                warp_cache[key].append(warp.destination_location)
+
             for tile in all_tiles:
                 accessible_from_direction = [False, False, False, False]
                 waterfall_to = None
-                forced_movement_to = None
+                forced_movement_to: dict[Direction, tuple[tuple[int, int], tuple[int, int], int]] | None = None
                 muddy_slope_to = None
                 needs_acro_bike = False
                 needs_bunny_hop = False
@@ -222,19 +243,51 @@ class PathMap:
                             steps += 1
                         else:
                             break
-                    forced_movement_to = destination, steps
-                else:
+                    forced_movement_to = {
+                        Direction.North: (destination.map_group_and_number, destination.local_position, steps),
+                        Direction.East: (destination.map_group_and_number, destination.local_position, steps),
+                        Direction.South: (destination.map_group_and_number, destination.local_position, steps),
+                        Direction.West: (destination.map_group_and_number, destination.local_position, steps),
+                    }
+                elif tile.tile_type == "Ice":
+                    accessible_from_direction = [True, True, True, True]
+                    forced_movement_to = {}
+                    for direction in (Direction.North, Direction.East, Direction.South, Direction.West):
+                        steps = 0
+                        destination = all_tiles[tile_index(tile.local_position[0], tile.local_position[1])]
+                        x, y = destination.local_position
+                        while destination.tile_type == "Ice":
+                            if direction is Direction.North:
+                                y -= 1
+                            elif direction is Direction.East:
+                                x += 1
+                            elif direction is Direction.South:
+                                y += 1
+                            else:
+                                x -= 1
+                            next_tile = get_map_data(tile.map_group_and_number, (x, y))
+                            if next_tile.elevation in (0, tile.elevation) and not next_tile.collision:
+                                destination = next_tile
+                                steps += 1
+                            else:
+                                break
+                        forced_movement_to[direction] = (
+                            destination.map_group_and_number,
+                            destination.local_position,
+                            steps,
+                        )
+                elif not self._is_optional_blocker(tile.local_position):
                     accessible_from_direction = [True, True, True, True]
 
                 on_enter_event_triggers = {}
-                for event in map_data.coord_events:
-                    if event.local_coordinates == tile.local_position and event.type != "weather":
-                        on_enter_event_triggers[event.trigger_var_number] = event.trigger_value
+                key = tile_index(*tile.local_position)
+                if key in event_triggers:
+                    for trigger_var_number, trigger_value in event_triggers[key]:
+                        on_enter_event_triggers[trigger_var_number] = trigger_value
 
                 warps_to = None
-                for warp in map_data.warps:
-                    if warp.local_coordinates == tile.local_position:
-                        destination = warp.destination_location
+                if key in warp_cache:
+                    for destination in warp_cache[key]:
                         extra_warp_direction = None
                         if tile.tile_type.endswith(" Arrow Warp"):
                             match tile.tile_type:
@@ -265,17 +318,14 @@ class PathMap:
                         warps_to,
                         waterfall_to.local_position if waterfall_to is not None else None,
                         muddy_slope_to.local_position if muddy_slope_to is not None else None,
-                        (
-                            (
-                                forced_movement_to[0].map_group_and_number,
-                                forced_movement_to[0].local_position,
-                                forced_movement_to[1],
-                            )
-                            if forced_movement_to is not None and forced_movement_to[1] > 0
-                            else None
-                        ),
+                        forced_movement_to,
                         needs_acro_bike,
                         needs_bunny_hop,
+                        cannot_run=(
+                            map_data.map_type == "Underwater"
+                            or not map_data.is_running_possible
+                            or tile.tile_type in ("Long Grass", "No Running", "Hot Springs", "Fortree Bridge")
+                        ),
                     )
                 )
             for map_object in map_data.objects:
@@ -303,6 +353,36 @@ class PathMap:
             self.offset[0] <= global_coordinates[0] < self.offset[0] + self.size[0]
             and self.offset[1] <= global_coordinates[1] < self.offset[1] + self.size[1]
         )
+
+    def _is_optional_blocker(self, local_coordinates: tuple[int, int]) -> bool:
+        """
+        There are some tiles that are modified dynamically, which doesn't
+        play nicely with the map meta data cache that we are using. So
+        instead of trying to fix it properly, here's just a list of
+        problematic tiles that the bot will check against.
+
+        :param local_coordinates: Tuple (x, y) of coordinates to check.
+        :return: True if this tile is blocked right now.
+        """
+
+        blockers: list[tuple[MapRSE | MapFRLG, tuple[int, int], str]] = []
+        if context.rom.is_emerald:
+            blockers = [
+                (MapRSE.SHOAL_CAVE_LOW_TIDE_INNER_ROOM, (31, 8), "RECEIVED_SHOAL_SALT_1"),
+                (MapRSE.SHOAL_CAVE_LOW_TIDE_INNER_ROOM, (14, 26), "RECEIVED_SHOAL_SALT_2"),
+                (MapRSE.SHOAL_CAVE_LOW_TIDE_STAIRS_ROOM, (11, 11), "RECEIVED_SHOAL_SALT_3"),
+                (MapRSE.SHOAL_CAVE_LOW_TIDE_LOWER_ROOM, (18, 2), "RECEIVED_SHOAL_SALT_4"),
+            ]
+
+        for blocker in blockers:
+            if (
+                blocker[0].value == self.map_group_and_number
+                and local_coordinates == blocker[1]
+                and not get_event_flag(blocker[2])
+            ):
+                return True
+
+        return False
 
 
 _maps: dict[str, dict[tuple[int, int], PathMap]] = {}
@@ -524,6 +604,7 @@ class Waypoint:
     map: tuple[int, int]
     coordinates: tuple[int, int]
     is_warp: bool
+    is_water_tile: bool
     action: WaypointAction | None = None
 
     @property
@@ -665,17 +746,17 @@ def calculate_path(
                 or (tile.map.map_group_and_number, tile.dynamic_object_id) not in active_objects
             ):
                 return False
-        if tile.elevation == 1 and from_elevation == 3 and can_surf():
-            return True
-        if tile.elevation == 3 and from_elevation == 1:
-            return True
-        if tile.elevation not in (0, 15) and from_elevation != 0 and tile.elevation != from_elevation:
-            return False
         if (
             tile.dynamic_collision_flag is None
             and tile.dynamic_object_id
             and (tile.map.map_group_and_number, tile.dynamic_object_id) not in active_objects
         ):
+            return False
+        if tile.elevation == 1 and from_elevation == 3 and can_surf():
+            return True
+        if tile.elevation == 3 and from_elevation == 1:
+            return True
+        if tile.elevation not in (0, 15) and from_elevation != 0 and tile.elevation != from_elevation:
             return False
         if tile.global_coordinates in blocked_coordinates:
             return False
@@ -688,12 +769,16 @@ def calculate_path(
             if node.tile.warps_to and len(result) == 0:
                 warp_map, warp_coords, extra_warp_direction = node.tile.warps_to
                 if extra_warp_direction is not None:
-                    result.append(Waypoint(extra_warp_direction, warp_map, warp_coords, True))
+                    result.append(Waypoint(extra_warp_direction, warp_map, warp_coords, True, node.elevation == 1))
                     waypoint = Waypoint(
-                        direction, node.tile.map.map_group_and_number, node.tile.local_coordinates, False
+                        direction,
+                        node.tile.map.map_group_and_number,
+                        node.tile.local_coordinates,
+                        False,
+                        node.elevation == 1,
                     )
                 else:
-                    waypoint = Waypoint(direction, warp_map, warp_coords, True)
+                    waypoint = Waypoint(direction, warp_map, warp_coords, True, node.elevation == 1)
 
             else:
                 if node.came_from.elevation == 3 and node.elevation == 1:
@@ -714,7 +799,12 @@ def calculate_path(
                     action = None
 
                 waypoint = Waypoint(
-                    direction, node.tile.map.map_group_and_number, node.tile.local_coordinates, False, action
+                    direction,
+                    node.tile.map.map_group_and_number,
+                    node.tile.local_coordinates,
+                    False,
+                    node.elevation == 1,
+                    action,
                 )
             result.append(waypoint)
 
@@ -773,6 +863,9 @@ def calculate_path(
             else:
                 cost = node.current_cost + 1
 
+            if tile.cannot_run:
+                cost += 1
+
             # This handles the case where beginning to surf is required. The dialogue and animation
             # take around 267 frames (depending on the length of the Pokémon's name), whereas a
             # regular step takes 16 frames. So starting to surf is around 17× more expensive than
@@ -808,13 +901,13 @@ def calculate_path(
                 is_muddy_slope = True
 
             if neighbour.forced_movement_to is not None:
-                cost += neighbour.forced_movement_to[2]
-                if neighbour.forced_movement_to[2] < 0:
+                cost += neighbour.forced_movement_to[direction][2]
+                if neighbour.forced_movement_to[direction][2] < 0:
                     raise RuntimeError(
-                        f"Encountered a negative-length forced movement from {neighbour.local_coordinates} to {neighbour.forced_movement_to}."
+                        f"Encountered a negative-length forced movement from {neighbour.local_coordinates} to {neighbour.forced_movement_to[direction]}."
                     )
                 neighbour = _find_tile_by_local_coordinates(
-                    neighbour.forced_movement_to[0], neighbour.forced_movement_to[1]
+                    neighbour.forced_movement_to[direction][0], neighbour.forced_movement_to[direction][1]
                 )
                 neighbour_coordinates = neighbour.global_coordinates
 

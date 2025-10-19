@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from functools import cached_property
 from typing import Literal, TYPE_CHECKING
 
+from modules.berry_trees import get_berry_tree_by_id
 from modules.context import context
 from modules.game import decode_string, get_event_flag_name, get_event_var_name
 from modules.items import get_item_by_name
@@ -1006,6 +1007,12 @@ class MapLocation:
             None,
         )
 
+    def object_by_coordinates(self, coordinates: tuple[int, int]) -> "ObjectEventTemplate | None":
+        return next(
+            (object_template for object_template in self.objects if object_template.local_coordinates == coordinates),
+            None,
+        )
+
     @property
     def coord_events(self) -> list[MapCoordEvent]:
         coord_event_count = self._event_list[2]
@@ -1047,10 +1054,23 @@ class MapLocation:
         return result
 
     def dict_for_map(self) -> dict:
+        pretty_name = self.map_name
+        try:
+            from modules.map_data import MapFRLG, MapRSE
+
+            if context.rom.is_frlg:
+                map_enum = MapFRLG(*self.map_group_and_number)
+            else:
+                map_enum = MapRSE(*self.map_group_and_number)
+            pretty_name = map_enum.pretty_name
+        except:
+            pass
+
         return {
             "map_group": self.map_group,
             "map_number": self.map_number,
             "name": self.map_name,
+            "pretty_name": pretty_name,
             "size": self.map_size,
             "type": self.map_type,
             "weather": self.weather,
@@ -1467,6 +1487,21 @@ class ObjectEvent:
                 return "Left"
             case 4:
                 return "Right"
+        return "???"
+
+    @property
+    def facing_coordinates(self) -> tuple[int, int]:
+        x, y = self.current_coords
+        match self.facing_direction:
+            case "Down":
+                return x, y + 1
+            case "Up":
+                return x, y - 1
+            case "Left":
+                return x - 1, y
+            case "Right":
+                return x + 1, y
+        return x, y + 1
 
     @property
     def movement_direction(self) -> str:
@@ -1480,6 +1515,7 @@ class ObjectEvent:
                 return "Left"
             case 4:
                 return "Right"
+        return "???"
 
     @property
     def range_x(self) -> int:
@@ -1693,6 +1729,12 @@ class ObjectEventTemplate:
                 return f"Buried Trainer {defeated} at {self.local_coordinates}"
             else:
                 return f"Trainer {defeated} at {self.local_coordinates}"
+        elif self.movement_type == "BERRY_TREE_GROWTH":
+            berry_tree = get_berry_tree_by_id(self.berry_tree_id)
+            if berry_tree.berry is not None:
+                return f"Berry Tree ({berry_tree.berry.name}, {berry_tree.stage.name})"
+            else:
+                return "Berry Tree Spot (empty)"
         else:
             return f"Entity at {self.local_coordinates}"
 

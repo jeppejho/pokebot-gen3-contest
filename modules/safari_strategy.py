@@ -17,6 +17,7 @@ from modules.roms import ROM
 from modules.runtime import get_data_path
 from modules.tasks import get_global_script_context
 from modules.items import Pokeblock, PokeblockType, get_pokeblocks
+from collections import Counter
 
 
 class SafariHuntingMode(Enum):
@@ -190,85 +191,85 @@ class SafariPokemonRSE(Enum):
     PIKACHU = SafariCatchingLocation(
         get_species_by_name("Pikachu"),
         MapRSE.SAFARI_ZONE_SOUTH,
-        (25, 34),
+        (25, 30),
         SafariHuntingMode.SPIN,
     )
     ODDISH = SafariCatchingLocation(
         get_species_by_name("Oddish"),
         MapRSE.SAFARI_ZONE_NORTHWEST,
-        (6, 32),
+        (5, 7),
         SafariHuntingMode.SPIN,
     )
     GLOOM = SafariCatchingLocation(
         get_species_by_name("Gloom"),
         MapRSE.SAFARI_ZONE_NORTHWEST,
-        (6, 32),
+        (5, 7),
         SafariHuntingMode.SPIN,
     )
     DODUO = SafariCatchingLocation(
         get_species_by_name("Doduo"),
         MapRSE.SAFARI_ZONE_NORTHWEST,
-        (6, 32),
+        (5, 7),
         SafariHuntingMode.SPIN,
     )
     DODRIO = SafariCatchingLocation(
         get_species_by_name("Dodrio"),
         MapRSE.SAFARI_ZONE_NORTHWEST,
-        (6, 32),
+        (5, 7),
         SafariHuntingMode.SPIN,
     )
     RHYHORN = SafariCatchingLocation(
         get_species_by_name("Rhyhorn"),
         MapRSE.SAFARI_ZONE_NORTHWEST,
-        (6, 32),
+        (5, 7),
         SafariHuntingMode.SPIN,
     )
     PINSIR = SafariCatchingLocation(
         get_species_by_name("Pinsir"),
         MapRSE.SAFARI_ZONE_NORTHWEST,
-        (6, 32),
+        (5, 7),
         SafariHuntingMode.SPIN,
     )
     NATU = SafariCatchingLocation(
         get_species_by_name("Natu"),
         MapRSE.SAFARI_ZONE_NORTH,
-        (14, 33),
+        (5, 33),
         SafariHuntingMode.SPIN,
     )
     GIRAFARIG = SafariCatchingLocation(
         get_species_by_name("Girafarig"),
         MapRSE.SAFARI_ZONE_SOUTH,
-        (25, 34),
+        (25, 30),
         SafariHuntingMode.SPIN,
     )
     WOBBUFFET = SafariCatchingLocation(
         get_species_by_name("Wobbuffet"),
         MapRSE.SAFARI_ZONE_SOUTH,
-        (25, 34),
+        (25, 30),
         SafariHuntingMode.SPIN,
     )
     XATU = SafariCatchingLocation(
         get_species_by_name("Xatu"),
         MapRSE.SAFARI_ZONE_NORTH,
-        (14, 33),
+        (5, 33),
         SafariHuntingMode.SPIN,
     )
     HERACROSS = SafariCatchingLocation(
         get_species_by_name("Heracross"),
         MapRSE.SAFARI_ZONE_NORTH,
-        (14, 33),
+        (5, 33),
         SafariHuntingMode.SPIN,
     )
     PHANPY = SafariCatchingLocation(
         get_species_by_name("Phanpy"),
         MapRSE.SAFARI_ZONE_NORTH,
-        (14, 33),
+        (5, 33),
         SafariHuntingMode.SPIN,
     )
     PSYDUCK = SafariCatchingLocation(
         get_species_by_name("Psyduck"),
         MapRSE.SAFARI_ZONE_SOUTHWEST,
-        (20, 19),
+        (18, 17),
         SafariHuntingMode.SURF,
     )
     GOLDUCK = SafariCatchingLocation(
@@ -301,77 +302,77 @@ class SafariPokemonRSE(Enum):
     HOOTHOOT = SafariCatchingLocation(
         get_species_by_name("Hoothoot"),
         MapRSE.SAFARI_ZONE_SOUTHEAST,
-        (7, 15),
+        (18, 33),
         SafariHuntingMode.SPIN,
         availability=emerald_and_elite_four_defeated,
     )
     SPINARAK = SafariCatchingLocation(
         get_species_by_name("Spinarak"),
         MapRSE.SAFARI_ZONE_SOUTHEAST,
-        (7, 15),
+        (18, 33),
         SafariHuntingMode.SURF,
         availability=emerald_and_elite_four_defeated,
     )
     MAREEP = SafariCatchingLocation(
         get_species_by_name("Mareep"),
         MapRSE.SAFARI_ZONE_SOUTHEAST,
-        (7, 15),
+        (18, 33),
         SafariHuntingMode.SPIN,
         availability=emerald_and_elite_four_defeated,
     )
     AIPOM = SafariCatchingLocation(
         get_species_by_name("Aipom"),
         MapRSE.SAFARI_ZONE_NORTHEAST,
-        (29, 24),
+        (6, 22),
         SafariHuntingMode.SPIN,
         availability=emerald_and_elite_four_defeated,
     )
     SUNKERN = SafariCatchingLocation(
         get_species_by_name("Sunkern"),
         MapRSE.SAFARI_ZONE_SOUTHEAST,
-        (7, 15),
+        (18, 33),
         SafariHuntingMode.SPIN,
         availability=emerald_and_elite_four_defeated,
     )
     GLIGAR = SafariCatchingLocation(
         get_species_by_name("Gligar"),
         MapRSE.SAFARI_ZONE_SOUTHEAST,
-        (7, 15),
+        (18, 33),
         SafariHuntingMode.SPIN,
         availability=emerald_and_elite_four_defeated,
     )
     SNUBBULL = SafariCatchingLocation(
         get_species_by_name("Snubbull"),
         MapRSE.SAFARI_ZONE_SOUTHEAST,
-        (7, 15),
+        (18, 33),
         SafariHuntingMode.SPIN,
         availability=emerald_and_elite_four_defeated,
     )
     STANTLER = SafariCatchingLocation(
         get_species_by_name("Stantler"),
         MapRSE.SAFARI_ZONE_SOUTHEAST,
-        (7, 15),
+        (18, 33),
         SafariHuntingMode.SPIN,
         availability=emerald_and_elite_four_defeated,
     )
     MARILL = SafariCatchingLocation(
         get_species_by_name("Marill"),
         MapRSE.SAFARI_ZONE_SOUTHEAST,
-        (21, 12),
+        (24, 21),
         SafariHuntingMode.SURF,
         availability=emerald_and_elite_four_defeated,
     )
     WOOPER = SafariCatchingLocation(
         get_species_by_name("Wooper"),
         MapRSE.SAFARI_ZONE_SOUTHEAST,
-        (21, 12),
+        (24, 21),
         SafariHuntingMode.SURF,
         availability=emerald_and_elite_four_defeated,
     )
     QUAGSIRE = SafariCatchingLocation(
         get_species_by_name("Quagsire"),
         MapRSE.SAFARI_ZONE_SOUTHEAST,
-        (21, 12),
+        (24, 21),
         SafariHuntingMode.SURF,
         availability=emerald_and_elite_four_defeated,
     )
@@ -394,28 +395,28 @@ class SafariPokemonRSE(Enum):
     LEDYBA = SafariCatchingLocation(
         get_species_by_name("Ledyba"),
         MapRSE.SAFARI_ZONE_NORTHEAST,
-        (29, 24),
+        (6, 22),
         SafariHuntingMode.SPIN,
         availability=emerald_and_elite_four_defeated,
     )
     PINECO = SafariCatchingLocation(
         get_species_by_name("Pineco"),
         MapRSE.SAFARI_ZONE_NORTHEAST,
-        (29, 24),
+        (6, 22),
         SafariHuntingMode.SPIN,
         availability=emerald_and_elite_four_defeated,
     )
     TEDDIURSA = SafariCatchingLocation(
         get_species_by_name("Teddiursa"),
         MapRSE.SAFARI_ZONE_NORTHEAST,
-        (29, 24),
+        (6, 22),
         SafariHuntingMode.SPIN,
         availability=emerald_and_elite_four_defeated,
     )
     HOUNDOUR = SafariCatchingLocation(
         get_species_by_name("Houndour"),
         MapRSE.SAFARI_ZONE_NORTHEAST,
-        (29, 24),
+        (6, 22),
         SafariHuntingMode.SPIN,
         availability=emerald_and_elite_four_defeated,
     )
@@ -423,7 +424,7 @@ class SafariPokemonRSE(Enum):
     MILTANK = SafariCatchingLocation(
         get_species_by_name("Miltank"),
         MapRSE.SAFARI_ZONE_NORTHEAST,
-        (29, 24),
+        (6, 22),
         SafariHuntingMode.SPIN,
         availability=emerald_and_elite_four_defeated,
     )
@@ -700,6 +701,23 @@ class RSESafariStrategy:
         safari_pokemon = get_safari_pokemon(pokemon.species.name)
         return safari_pokemon in cls.POKEBLOCK
 
+    @staticmethod
+    def get_facing_direction_for_position(position: tuple[int, int]) -> str | None:
+        SAFARI_FEEDER_DIRECTIONS = {
+            (25, 30): "Left",  # PIKACHU, GIRAFARIG, WOBBUFFET
+            (5, 7): "Left",  # ODDISH, GLOOM, DODUO, DODRIO, RHYHORN, PINSIR
+            (5, 33): "Down",  # NATU, XATU, HERACROSS, PHANPY
+            (18, 17): "Up",  # PSYDUCK
+            (25, 13): None,  # GOLDUCK
+            (20, 20): None,  # GOLDEEN, MAGIKARP, SEAKING
+            (18, 33): "Right",  # HOOTHOOT, SPINARAK, MAREEP, SUNKERN, GLIGAR, SNUBBULL, STANTLER
+            (6, 22): "Left",  # AIPOM, LEDYBA, PINECO, TEDDIURSA, HOUNDOUR, MILTANK
+            (24, 21): "Right",  # MARILL, WOOPER, QUAGSIRE
+            (20, 12): None,  # REMORAID, OCTILLERY
+        }
+
+        return SAFARI_FEEDER_DIRECTIONS.get(position, None)
+
 
 def get_baiting_state(pokeblock: Pokeblock) -> int | None:
     """
@@ -741,6 +759,31 @@ def get_lowest_feel_any_pokeblock() -> tuple[int | None, Pokeblock | None]:
     return best_index, best_pokeblock
 
 
+def get_lowest_feel_pokeblock_by_type(
+    flavor_str: str,
+) -> Tuple[Optional[int], Optional[Pokeblock]]:
+    """
+    Return the index and Pokéblock with the lowest feel among those whose type matches the given flavor string.
+    """
+    try:
+        flavor = PokeblockType[flavor_str.capitalize()]
+    except KeyError:
+        raise ValueError(f"Invalid Pokéblock type: '{flavor_str}'")
+
+    pokeblocks = get_pokeblocks()
+    lowest_feel = float("inf")
+    best_index = None
+    best_pokeblock = None
+
+    for index, pokeblock in enumerate(pokeblocks):
+        if pokeblock.type == flavor and pokeblock.feel < lowest_feel:
+            lowest_feel = pokeblock.feel
+            best_index = index
+            best_pokeblock = pokeblock
+
+    return best_index, best_pokeblock
+
+
 def get_lowest_feel_excluding_type(excluded_type: PokeblockType) -> tuple[int | None, Pokeblock | None]:
     """Return the index and the Pokéblock with the lowest feel that is not of the excluded PokéblockType."""
     pokeblocks = get_pokeblocks()
@@ -755,6 +798,16 @@ def get_lowest_feel_excluding_type(excluded_type: PokeblockType) -> tuple[int | 
             best_pokeblock = pokeblock
 
     return best_index, best_pokeblock
+
+
+def get_pokeblock_type_counts() -> list[tuple[str, int]]:
+    """
+    Returns a list of tuples (type_name: str, count: int)
+    for each Pokéblock type present in the inventory.
+    """
+    pokeblocks = get_pokeblocks()
+    type_counter = Counter(pokeblock.type.name for pokeblock in pokeblocks)
+    return list(type_counter.items())
 
 
 def get_navigation_path(

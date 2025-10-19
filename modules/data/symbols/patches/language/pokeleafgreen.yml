@@ -320,7 +320,7 @@ gSpecialVar_0x8004:
 
 Task_Fanfare:
   D: 0x8071c20
-  F: 0x8079d44
+  F: 0x8071ce0
   I: 0x8071c0c
   J: 0x8071460
   S: 0x8071cf4
@@ -543,6 +543,12 @@ gPokemonStoragePtr:
   I: 0x3004f60
   J: 0x3005050
   S: 0x3004f60
+gStorage:
+  J: 0x20396fc
+sCursorArea:
+  J: 0x203976c
+sCursorPosition:
+  J: 0x203976d
 #-------------------------#
 
 #--------------#

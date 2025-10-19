@@ -3,6 +3,7 @@ import json
 import queue
 import threading
 from enum import IntFlag, auto
+from queue import Queue, Empty, Full
 from threading import Thread
 from time import sleep, time
 
@@ -34,11 +35,13 @@ class DataSubscription(IntFlag):
     Map = auto()
     MapTile = auto()
     MapEncounters = auto()
+    PokenavCall = auto()
     BotMode = auto()
     Message = auto()
     EmulatorSettings = auto()
     Inputs = auto()
     PerformanceData = auto()
+    CustomEvent = auto()
 
     @classmethod
     def all_names(cls):
@@ -117,6 +120,7 @@ timer_thread: Thread
 subscribers: list[tuple[int, queue.Queue, int, callable, ThreadSafeEvent]] = []
 subscriptions: dict[str, ThreadSafeCounter] = {name: ThreadSafeCounter() for name in DataSubscription.all_names()}
 max_client_id: ThreadSafeCounter = ThreadSafeCounter()
+custom_events_queue: Queue[str] = Queue()
 
 
 def add_subscriber(subscribed_topics: list[str]) -> tuple[queue.Queue, callable, ThreadSafeEvent]:
@@ -153,6 +157,21 @@ def add_subscriber(subscribed_topics: list[str]) -> tuple[queue.Queue, callable,
     return message_queue, unsubscribe, new_message_event
 
 
+def send_custom_http_stream_event(event_data: str) -> None:
+    """
+    Sends a custom event via the HTTP stream endpoint.
+    This can be used by plugins to communicate things to API consumers.
+    The 'vanilla' bot doesn't use this.
+
+    :param event_data: An arbitrary string that can be interpreted by HTTP stream clients.
+    """
+    global custom_events_queue
+    try:
+        custom_events_queue.put_nowait(event_data)
+    except Full:
+        pass
+
+
 def run_watcher():
     update_interval = update_interval_in_ms / 1000
     previous_second = int(time())
@@ -175,6 +194,9 @@ def run_watcher():
         "map_group_and_number": map_group_and_number,
         "map_local_coordinates": map_local_coordinates,
         "map_encounters": state_cache.effective_wild_encounters.frame,
+        "pokenav_calls": (
+            context.stats.current_shiny_phase.pokenav_calls if context.stats.current_shiny_phase is not None else 0
+        ),
         "game_state": get_game_state(),
     }
     previous_emulator_state = {
@@ -190,17 +212,20 @@ def run_watcher():
         current_second = int(time())
         current_game_state = get_game_state()
 
-        if current_second != previous_second and subscriptions["PerformanceData"] > 0:
-            send_message(
-                DataSubscription.PerformanceData,
-                data={
-                    "fps": context.emulator.get_current_fps(),
-                    "frame_count": context.emulator.get_frame_count(),
-                    "current_time_spent_in_bot_fraction": context.emulator.get_current_time_spent_in_bot_fraction(),
-                    "encounter_rate": context.stats.encounter_rate,
-                },
-                event_type="PerformanceData",
-            )
+        if current_second != previous_second:
+            send_message(None, data=None, event_type="Ping")
+
+            if subscriptions["PerformanceData"] > 0:
+                send_message(
+                    DataSubscription.PerformanceData,
+                    data={
+                        "fps": context.emulator.get_current_fps(),
+                        "frame_count": context.emulator.get_frame_count(),
+                        "current_time_spent_in_bot_fraction": context.emulator.get_current_time_spent_in_bot_fraction(),
+                        "encounter_rate": context.stats.encounter_rate,
+                    },
+                    event_type="PerformanceData",
+                )
 
         if subscriptions["Player"] > 0:
             if state_cache.player.age_in_frames >= 60:
@@ -307,7 +332,7 @@ def run_watcher():
                     send_message(DataSubscription.Map, data=current_coords, event_type="MapTileChange")
                     previous_game_state["map_local_coordinates"] = current_coords
 
-        if subscriptions["MapEncounters"] > 0:
+        if subscriptions["MapEncounters"] > 0 and current_game_state is GameState.OVERWORLD:
             if state_cache.effective_wild_encounters.age_in_frames >= 300:
                 # If the cached encounter data is too old, tell the main thread to update it at the next
                 # possible opportunity.
@@ -316,6 +341,17 @@ def run_watcher():
                 encounters = state_cache.effective_wild_encounters.value
                 previous_game_state["map_encounters"] = state_cache.effective_wild_encounters.frame
                 send_message(DataSubscription.MapEncounters, data=encounters.to_dict(), event_type="MapEncounters")
+
+        if subscriptions["PokenavCall"] > 0:
+            if (
+                context.stats.current_shiny_phase is not None
+                and previous_game_state["pokenav_calls"] != context.stats.current_shiny_phase.pokenav_calls
+            ):
+                if previous_game_state["pokenav_calls"] < context.stats.current_shiny_phase.pokenav_calls:
+                    # Only report a Pokénav call if the number has increased. It will 'decrease' (reset
+                    # to 0) when the shiny phase ends.
+                    send_message(DataSubscription.PokenavCall, data=None, event_type="PokenavCall")
+                previous_game_state["pokenav_calls"] = context.stats.current_shiny_phase.pokenav_calls
 
         if subscriptions["BotMode"] > 0 and context.bot_mode != previous_emulator_state["bot_mode"]:
             previous_emulator_state["bot_mode"] = context.bot_mode
@@ -349,6 +385,20 @@ def run_watcher():
                 previous_emulator_state["video_enabled"] = context.video
                 send_message(DataSubscription.EmulatorSettings, data=context.video, event_type="VideoEnabled")
 
+        if custom_events_queue.qsize() > 0:
+            try:
+                while True:
+                    custom_event = custom_events_queue.get_nowait()
+                    if subscriptions["CustomEvent"] > 0:
+                        send_message(
+                            DataSubscription.CustomEvent,
+                            data=custom_event,
+                            event_type="CustomEvent",
+                            do_not_json_encode=True,
+                        )
+            except Empty:
+                pass
+
         if current_game_state != previous_game_state["game_state"]:
             previous_game_state["game_state"] = current_game_state
 
@@ -359,17 +409,18 @@ def run_watcher():
 
 
 def send_message(
-    subscription_flag: DataSubscription,
+    subscription_flag: DataSubscription | None,
     data: str | list | tuple | dict | int | float | None,
     event_type: str | None = None,
+    do_not_json_encode: bool = False,
 ) -> None:
     if event_type is not None:
-        message = f"event: {event_type}\ndata: {json.dumps(data)}"
+        message = f"event: {event_type}\ndata: {json.dumps(data) if not do_not_json_encode else data}"
     else:
         message = f"data: {json.dumps(data)}"
 
     for index in reversed(range(len(subscribers))):
-        if subscribers[index][2] & subscription_flag:
+        if subscription_flag is None or subscribers[index][2] & subscription_flag:
             try:
                 subscribers[index][1].put_nowait(message)
                 subscribers[index][4].set()

@@ -2,9 +2,10 @@ from typing import Generator
 
 from modules.context import context
 from modules.encounter import handle_encounter, EncounterInfo
+from modules.items import get_item_by_name
 from modules.map_data import MapRSE
 from modules.memory import get_event_flag
-from modules.player import get_player_avatar
+from modules.player import get_player_avatar, get_player, get_player_location
 from modules.pokemon_party import get_party_size
 from modules.save_data import get_last_heal_location
 from . import BattleAction
@@ -14,9 +15,10 @@ from ._asserts import (
     assert_boxes_or_party_can_fit_pokemon,
 )
 from ._interface import BotMode, BotModeError
-from .util import ensure_facing_direction, navigate_to
+from .util import ensure_facing_direction, navigate_to, mount_bicycle, follow_waypoints
 from ..battle_strategies import BattleStrategy
 from ..battle_strategies.lose_on_purpose import LoseOnPurposeBattleStrategy
+from ..map_path import calculate_path, Direction
 
 
 class KecleonMode(BotMode):
@@ -61,9 +63,27 @@ class KecleonMode(BotMode):
         if get_party_size() > 1:
             raise BotModeError("This mode requires only one Pokémon in the party.")
 
+        use_bicycle = False
+        use_mach_bike = False
+        registered = get_player().registered_item
+        if registered == get_item_by_name("Acro Bike"):
+            use_bicycle = True
+        elif registered == get_item_by_name("Mach Bike"):
+            use_bicycle = True
+            use_mach_bike = True
+
         while context.bot_mode != "Manual":
             self._has_whited_out = False
-            yield from navigate_to(MapRSE.ROUTE119, (31, 7))
+            if use_bicycle:
+                yield from mount_bicycle()
+            if use_mach_bike:
+                yield from follow_waypoints(
+                    calculate_path(get_player_location(), (MapRSE.ROUTE119, (31, 7))),
+                    final_facing_direction=Direction.North,
+                )
+            else:
+                yield from navigate_to(MapRSE.ROUTE119, (31, 7))
+                yield from ensure_facing_direction("Up")
             yield from ensure_facing_direction("Up")
             while not self._has_whited_out:
                 context.emulator.press_button("A")

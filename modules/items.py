@@ -269,6 +269,17 @@ class Pokeblock:
     sour: int
     feel: int
 
+    def __eq__(self, __value):
+        return (
+            self.colour is __value.colour
+            and self.spicy == __value.spicy
+            and self.dry == __value.dry
+            and self.sweet == __value.sweet
+            and self.bitter == __value.bitter
+            and self.sour == __value.sour
+            and self.feel == __value.feel
+        )
+
     @property
     def level(self):
         return max(self.spicy, self.dry, self.sweet, self.bitter, self.sour)
@@ -363,7 +374,7 @@ class ItemBag:
         offset = self.items_size + self.key_items_size + self.poke_balls_size + self.tms_hms_size
         return self._get_pocket(slot_offset=offset, number_of_slots=self.berries_size)
 
-    def has_space_for(self, item: Item) -> bool:
+    def has_space_for(self, item: Item, quantity: int = 1) -> bool:
         match item.pocket:
             case ItemPocket.Items:
                 pocket = self.items
@@ -393,7 +404,7 @@ class ItemBag:
         else:
             stack_size = 99
 
-        return any(slot.item == item and slot.quantity < stack_size for slot in pocket)
+        return any(slot.item == item and slot.quantity + quantity <= stack_size for slot in pocket)
 
     def pocket_for(self, item: Item) -> list[ItemSlot]:
         match item.pocket:

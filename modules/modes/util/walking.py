@@ -112,7 +112,9 @@ class TimedOutTryingToReachWaypointError(BotModeError):
 
 
 @debug.track
-def follow_waypoints(path: Iterable[Waypoint], run: bool = True) -> Generator:
+def follow_waypoints(
+    path: Iterable[Waypoint | None], run: bool = True, final_facing_direction: Direction | None = None
+) -> Generator:
     """
     Follows a given set of waypoints.
 
@@ -126,6 +128,9 @@ def follow_waypoints(path: Iterable[Waypoint], run: bool = True) -> Generator:
     :param path: A list (or generator) of waypoints to follow.
     :param run: Whether to run (hold `B`.) This is ignored when on a bicycle, since it would be either
                 meaningless or actively detrimental (Acro Bike, where it would initiate wheelie mode.)
+    :param final_facing_direction: A direction that the player avatar should face after reaching its
+                                   destination. This can be useful to make it bump into an obstacle with
+                                   the Mach Bike.
     """
 
     if get_game_state() != GameState.OVERWORLD:
@@ -140,7 +145,7 @@ def follow_waypoints(path: Iterable[Waypoint], run: bool = True) -> Generator:
     # this flag will just be ignored.
     # Similarly, running is not possible when surfing or swimming underwater, but pressing B can
     # cause the game to try and dive/emerge which we don't want.
-    if run and (get_player_avatar().is_on_bike or get_player_avatar().is_in_water):
+    if run and get_player_avatar().is_on_bike:
         run = False
 
     # For each waypoint (i.e. each step of the path) we set a timeout. If the player avatar does not reach the
@@ -156,6 +161,10 @@ def follow_waypoints(path: Iterable[Waypoint], run: bool = True) -> Generator:
     current_position = get_map_data_for_current_position()
     last_waypoint = None
     for waypoint in path:
+        if waypoint is None:
+            yield
+            continue
+
         # For the first waypoint it is possible that the player avatar is not facing the same way as it needs to
         # walk. This leads to the first navigation step to actually become two: Turning around, then doing the step.
         # When in tall grass, that could lead to an encounter starting mid-step which messes up the battle handling.
@@ -269,13 +278,19 @@ def follow_waypoints(path: Iterable[Waypoint], run: bool = True) -> Generator:
                     context.emulator.hold_button(waypoint.walking_direction)
                 else:
                     context.emulator.hold_button(waypoint.walking_direction)
-                    if run and not AvatarFlags.OnAcroBike in get_player_avatar().flags:
+                    if run and not waypoint.is_water_tile and not AvatarFlags.OnAcroBike in get_player_avatar().flags:
                         context.emulator.hold_button("B")
             else:
                 context.emulator.reset_held_buttons()
                 if waypoint.action is WaypointAction.AcroBikeBunnyHop:
                     context.emulator.hold_button("B")
 
+            yield
+
+    if final_facing_direction is not None:
+        context.emulator.reset_held_buttons()
+        while get_player_avatar().facing_direction != final_facing_direction.button_name:
+            context.emulator.hold_button(final_facing_direction.button_name)
             yield
 
     # Wait for player to come to a full stop.
@@ -298,6 +313,7 @@ def navigate_to(
     avoid_encounters: bool = True,
     avoid_scripted_events: bool = True,
     expecting_script: bool = False,
+    final_facing_direction: Direction | None = None,
 ) -> Generator:
     """
     Tries to walk the player to a given location while circumventing obstacles.
@@ -318,6 +334,9 @@ def navigate_to(
                                   still navigate via those tiles of there is no other option.
     :param expecting_script: This will accept if a script is triggered during navigation (presumably at the destination)
                              and will not show an error about that.
+    :param final_facing_direction: A direction that the player avatar should face after reaching its
+                                   destination. This can be useful to make it bump into an obstacle with
+                                   the Mach Bike.
     """
 
     def waypoint_generator():
@@ -352,7 +371,7 @@ def navigate_to(
 
     while True:
         try:
-            yield from follow_waypoints(waypoint_generator(), run)
+            yield from follow_waypoints(waypoint_generator(), run, final_facing_direction=final_facing_direction)
             break
         except TimedOutTryingToReachWaypointError:
             # If we run into a timeout while trying to follow the waypoints, this is likely because of either of
@@ -438,7 +457,7 @@ def ensure_facing_direction(facing_direction: str | Direction | tuple[int, int])
             raise BotModeError(f"Tile ({x}, {y}) is not adjacent to the player.")
 
     if isinstance(facing_direction, Direction):
-        facing_direction = facing_direction.button_name()
+        facing_direction = facing_direction.button_name
 
     while True:
         avatar = get_player_avatar()

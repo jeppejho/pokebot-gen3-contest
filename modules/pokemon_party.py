@@ -54,11 +54,11 @@ class Party:
         return any([pokemon.is_egg for pokemon in self._pokemon])
 
     @property
-    def eggs(self) -> list[Pokemon]:
+    def eggs(self) -> list[PartyPokemon]:
         return [pokemon for pokemon in self._pokemon if pokemon.is_egg]
 
     @property
-    def non_eggs(self) -> list[Pokemon]:
+    def non_eggs(self) -> list[PartyPokemon]:
         return [pokemon for pokemon in self._pokemon if not pokemon.is_egg]
 
     @property
@@ -66,8 +66,12 @@ class Party:
         return list(filter(lambda pokemon: not pokemon.is_egg and pokemon.current_hp > 0, self._pokemon))
 
     @property
-    def first_non_fainted(self) -> PartyPokemon:
-        return self.non_fainted_pokemon[0]
+    def first_non_fainted(self) -> PartyPokemon | None:
+        non_fainted_pokemon = self.non_fainted_pokemon
+        if len(non_fainted_pokemon) > 0:
+            return self.non_fainted_pokemon[0]
+        else:
+            return None
 
     def has_pokemon_with_move(self, move: Move | str, with_pp_remaining: bool = False) -> bool:
         return any(pokemon.knows_move(move, with_pp_remaining) and not pokemon.is_egg for pokemon in self._pokemon)
@@ -89,7 +93,13 @@ class Party:
                 return pokemon
         return None
 
-    def to_list(self) -> list[PartyPokemon]:
+    def get_index_for_pokemon(self, pokemon: Pokemon) -> int:
+        for party_index, party_pokemon in enumerate(self._pokemon):
+            if pokemon.data[:4] == party_pokemon.data[:4]:
+                return party_index
+        raise RuntimeError("This Pokémon is not in the player's party.")
+
+    def to_list(self) -> list[dict]:
         return [pokemon.to_dict() for pokemon in self._pokemon]
 
 
@@ -173,4 +183,8 @@ def get_current_repel_level() -> int:
     :return: The minimum level that wild encounters can have, given the current Repel
              state and the level of the first non-fainted Pokémon.
     """
-    return get_party().first_non_fainted.level if get_event_var("REPEL_STEP_COUNT") > 0 else 0
+    first_non_fainted_party_member = get_party().first_non_fainted
+    if first_non_fainted_party_member is None:
+        return 0
+    else:
+        return get_party().first_non_fainted.level if get_event_var("REPEL_STEP_COUNT") > 0 else 0
